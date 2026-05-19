@@ -1,66 +1,40 @@
 pipeline {
     agent any
-
     environment {
-        // تعريف اسم الصورة (Image Name)
-        DOCKER_IMAGE = "my-python-app:latest"
-        CONTAINER_NAME = "my-python-app-container"
+        IMAGE_NAME = "my-python-app"
+        CONTAINER_NAME = "python-app-container"
+        PORT = "5000"
     }
-
     stages {
-        // 1. مرحلة الـ Checkout (سحب الكود من GitHub)
         stage('Checkout') {
             steps {
-                echo 'Checking out code from Git...'
                 checkout scm
             }
         }
-
-        // 2. مرحلة الـ Build (بناء صورة الـ Docker وتجهيز البيئة)
         stage('Build') {
             steps {
-                echo 'Building Docker Image...'
-                script {
-                    sh "docker build -t ${DOCKER_IMAGE} ."
-                }
+                sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+                sh "docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest"
             }
         }
-
-        // 3. مرحلة الـ Test (تشغيل الـ Tests داخل الـ Container أو بيئة مؤقتة)
         stage('Test') {
             steps {
-                echo 'Running Unit Tests...'
-                script {
-                    // تشغيل الـ pytest للتأكد من سلامة الكود
-                    sh "docker run --rm ${DOCKER_IMAGE} pytest test_app.py"
-                }
+                sh "docker run --rm ${IMAGE_NAME}:${BUILD_NUMBER} pytest test_main.py"
             }
         }
-
-        // 4. مرحلة الـ Deploy (تشغيل التطبيق ليكون متاحاً للمستخدمين)
         stage('Deploy') {
             steps {
-                echo 'Deploying Application...'
-                script {
-                    // إيقاف وحذف الحاوية القديمة إذا كانت موجودة لتجنب تضارب المنافذ
-                    sh "docker stop ${CONTAINER_NAME} || true"
-                    sh "docker rm ${CONTAINER_NAME} || true"
-                    
-                    // تشغيل الحاوية الجديدة في الخلفية (Detached Mode) على بورت 5000
-                    sh "docker run -d -p 5000:5000 --name ${CONTAINER_NAME} ${DOCKER_IMAGE}"
-                }
+                sh 'if [ $(docker ps -aq -f name=${CONTAINER_NAME}) ]; then docker rm -f ${CONTAINER_NAME}; fi'
+                sh "docker run -d --name ${CONTAINER_NAME} -p ${PORT}:5000 ${IMAGE_NAME}:latest"
             }
         }
     }
-
-    // التنظيف والأخطار (اختياري ولكن احترافي)
     post {
         success {
-            echo 'Pipeline completed successfully!'
+            echo "Pipeline completed successfully!"
         }
         failure {
-            echo 'Pipeline failed. Check logs for details.'
+            echo "Pipeline failed."
         }
     }
-
-	
+}
